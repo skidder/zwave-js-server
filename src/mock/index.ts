@@ -1,6 +1,10 @@
 import type { Driver, ZWaveOptions } from "zwave-js";
 import { EventEmitter } from "events";
 import { LogConfig } from "@zwave-js/core";
+import type {
+  MaintenanceFinding,
+  MaintenanceVerification,
+} from "../lib/maintenance.js";
 
 class MockController extends EventEmitter {
   homeId = 1;
@@ -47,6 +51,30 @@ class MockDriver extends EventEmitter {
   ) {}
 
   public updateOptions(_options: Partial<ZWaveOptions>) {}
+
+  // Maintenance (report flood) findings, schema version >= 53
+  public maintenanceFindings: MaintenanceFinding[] = [];
+  /** Applied suggestions, recorded for test assertions */
+  public appliedSuggestions: { findingId: string; nodeId: number }[] = [];
+
+  public getMaintenanceFindings(): readonly MaintenanceFinding[] {
+    return this.maintenanceFindings;
+  }
+
+  public async applyMaintenanceSuggestion(
+    findingId: string,
+    nodeId: number,
+  ): Promise<MaintenanceVerification> {
+    this.appliedSuggestions.push({ findingId, nodeId });
+    return {
+      nodeId,
+      state: "verifying",
+      message: "Checking traffic…",
+      preWriteRate: 900,
+      appliedAt: 1000,
+      retriesLeft: 1,
+    };
+  }
 
   async destroy() {}
 }

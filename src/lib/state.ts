@@ -52,6 +52,10 @@ import {
   ZWaveApiVersion,
 } from "@zwave-js/core";
 import { numberFromLogLevel } from "../util/logger.js";
+import {
+  getMaintenanceFindings,
+  type MaintenanceFinding,
+} from "./maintenance.js";
 
 type Modify<T, R> = Omit<T, keyof R> & R;
 
@@ -68,7 +72,13 @@ export interface DriverStateSchema47 extends DriverStateSchema0 {
   configVersion: string;
 }
 
-export type DriverState = DriverStateSchema0 | DriverStateSchema47;
+export interface DriverStateSchema53 extends DriverStateSchema47 {
+  /** Active maintenance (report flood) findings, schema version >= 53 */
+  maintenanceFindings: readonly MaintenanceFinding[];
+}
+
+export type DriverState =
+  DriverStateSchema0 | DriverStateSchema47 | DriverStateSchema53;
 
 export interface ControllerStateSchema0 {
   libraryVersion?: string;
@@ -454,9 +464,7 @@ export type FoundNodeStateSchema23 = Modify<
 >;
 
 export type FoundNodeState =
-  | FoundNodeStateSchema19
-  | FoundNodeStateSchema22
-  | FoundNodeStateSchema23;
+  FoundNodeStateSchema19 | FoundNodeStateSchema22 | FoundNodeStateSchema23;
 
 export function getNodeValues(
   node: ZWaveNode,
@@ -961,7 +969,14 @@ export const dumpDriver = (
   driver47.ready = driver.ready;
   driver47.allNodesReady = driver.allNodesReady;
   driver47.configVersion = driver.configVersion;
-  return driver47;
+
+  if (schemaVersion < 53) {
+    return driver47;
+  }
+
+  const driver53 = driver47 as DriverStateSchema53;
+  driver53.maintenanceFindings = getMaintenanceFindings(driver);
+  return driver53;
 };
 
 export const dumpController = (

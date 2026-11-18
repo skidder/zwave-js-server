@@ -2,6 +2,10 @@ import { LogConfig, TransmitStatus } from "@zwave-js/core";
 import { DriverState } from "../state.js";
 import { DriverCommand } from "./command.js";
 import { OTWFirmwareUpdateResultType } from "../common.js";
+import {
+  type MaintenanceFinding,
+  type MaintenanceVerification,
+} from "../maintenance.js";
 
 export interface DriverResultTypes {
   [DriverCommand.getConfig]: { config: DriverState };
@@ -39,4 +43,11 @@ export interface DriverResultTypes {
   // RSSI monitoring
   [DriverCommand.enableFrequentRSSIMonitoring]: Record<string, never>;
   [DriverCommand.disableFrequentRSSIMonitoring]: Record<string, never>;
+  // Maintenance (report flood) findings, schema version >= 53:
+  [DriverCommand.getMaintenanceFindings]: {
+    maintenanceFindings: readonly MaintenanceFinding[];
+  };
+  [DriverCommand.applyMaintenanceSuggestion]: {
+    verification: MaintenanceVerification;
+  };
 }

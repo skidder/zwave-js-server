@@ -7,6 +7,10 @@ import { libVersion } from "zwave-js";
 import { ZwavejsServer } from "../lib/server.js";
 import { createMockDriver } from "../mock/index.js";
 import { minSchemaVersion, maxSchemaVersion } from "../lib/const.js";
+import {
+  maintenanceFindingEvents,
+  type MaintenanceFinding,
+} from "../lib/maintenance.js";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 
@@ -135,6 +139,7 @@ const runTest = async () => {
             ready: true,
             allNodesReady: true,
             configVersion: "0.0.0-mock",
+            maintenanceFindings: [],
           },
           controller: { homeId: 1 },
           nodes: [],
@@ -215,6 +220,191 @@ const runTest = async () => {
     });
 
     assert.deepEqual(driver.getLogConfig().transports, [customTransport]);
+
+    // Maintenance (report flood) findings, schema version >= 53
+    const testFinding: MaintenanceFinding = {
+      id: "report-flood-loud-network",
+      kind: "loud-network",
+      severity: "warning",
+      reason: "A few devices send most of the network's traffic",
+      nodes: [
+        {
+          nodeId: 3,
+          hourlyRate: 1420,
+          shareOfInbound: 0.82,
+          hasTaggedParams: true,
+          suggestionRows: [
+            {
+              parameter: 5,
+              purpose: "reporting_threshold.power",
+              kind: "threshold",
+              unit: "W",
+              currentValue: 5,
+              defaultValue: 5,
+              proposedValue: 15,
+              minValue: 5,
+              maxValue: 50,
+              stillAtFactoryDefault: true,
+            },
+            {
+              parameter: 6,
+              purpose: "reporting_interval.power",
+              kind: "interval",
+              unit: "min",
+              currentValue: 5,
+              defaultValue: 5,
+              proposedValue: 15,
+              minValue: 5,
+              maxValue: 3600,
+            },
+          ],
+        },
+      ],
+      verification: [],
+      createdAt: 1731793200000,
+      updatedAt: 1731793200000,
+    };
+
+    // The finding payloads carry no home ID, security keys or log data
+    const assertNoSecrets = (value: unknown): void => {
+      if (Array.isArray(value)) {
+        value.forEach(assertNoSecrets);
+        return;
+      }
+      if (typeof value === "object" && value !== null) {
+        for (const [key, entry] of Object.entries(value)) {
+          assert.ok(
+            !/homeid|securitykey|log/i.test(key),
+            `Finding payload must not contain "${key}"`,
+          );
+          assertNoSecrets(entry);
+        }
+      }
+    };
+    assertNoSecrets(testFinding);
+
+    // A schema 52 client must not receive the new events or state
+    const socket52 = new ws(`ws://localhost:${PORT}`);
+    const nextMessage52 = createNextMessage(socket52);
+    await new Promise((resolve) => socket52.once("open", resolve));
+    // version message
+    await nextMessage52();
+    socket52.send(
+      JSON.stringify({
+        command: "initialize",
+        messageId: "initialize-52",
+        schemaVersion: 52,
+      }),
+    );
+    assert.deepEqual(await nextMessage52(), {
+      type: "result",
+      success: true,
+      messageId: "initialize-52",
+      result: {},
+    });
+    socket52.send(
+      JSON.stringify({
+        messageId: "start-listening-52",
+        command: "start_listening",
+      }),
+    );
+    assert.deepEqual(await nextMessage52(), {
+      type: "result",
+      success: true,
+      messageId: "start-listening-52",
+      result: {
+        state: {
+          driver: {
+            logConfig: { enabled: true, level: "info" },
+            statisticsEnabled: true,
+            ready: true,
+            allNodesReady: true,
+            configVersion: "0.0.0-mock",
+          },
+          controller: { homeId: 1 },
+          nodes: [],
+        },
+      },
+    });
+
+    // The events are forwarded to listening schema 53 clients verbatim
+    const mockMaintenanceDriver = driver as unknown as {
+      maintenanceFindings: MaintenanceFinding[];
+      appliedSuggestions: { findingId: string; nodeId: number }[];
+      emit(event: string, ...args: unknown[]): void;
+    };
+    for (const event of maintenanceFindingEvents) {
+      mockMaintenanceDriver.emit(event, testFinding);
+      assert.deepEqual(await nextMessage(), {
+        type: "event",
+        event: {
+          source: "driver",
+          event,
+          finding: testFinding,
+        },
+      });
+    }
+
+    // The schema 52 client received none of the above
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    assert.equal(
+      await Promise.race([
+        nextMessage52(),
+        new Promise((resolve) => setTimeout(() => resolve(undefined), 250)),
+      ]),
+      undefined,
+      "Schema 52 client must not receive maintenance finding events",
+    );
+    socket52.close();
+
+    // The get command returns the active findings
+    mockMaintenanceDriver.maintenanceFindings.push(testFinding);
+    socket.send(
+      JSON.stringify({
+        messageId: "get-maintenance-findings",
+        command: "driver.get_maintenance_findings",
+      }),
+    );
+    assert.deepEqual(
+      await waitForResult(nextMessage, "get-maintenance-findings"),
+      {
+        type: "result",
+        success: true,
+        messageId: "get-maintenance-findings",
+        result: { maintenanceFindings: [testFinding] },
+      },
+    );
+
+    // The apply command is the only write path, and it round-trips
+    socket.send(
+      JSON.stringify({
+        messageId: "apply-maintenance-suggestion",
+        command: "driver.apply_maintenance_suggestion",
+        findingId: testFinding.id,
+        nodeId: 3,
+      }),
+    );
+    assert.deepEqual(
+      await waitForResult(nextMessage, "apply-maintenance-suggestion"),
+      {
+        type: "result",
+        success: true,
+        messageId: "apply-maintenance-suggestion",
+        result: {
+          verification: {
+            nodeId: 3,
+            state: "verifying",
+            message: "Checking traffic…",
+            preWriteRate: 900,
+            appliedAt: 1000,
+            retriesLeft: 1,
+          },
+        },
+      },
+    );
+    assert.deepEqual(mockMaintenanceDriver.appliedSuggestions, [
+      { findingId: testFinding.id, nodeId: 3 },
+    ]);
 
     // A client that connects while the driver is not ready is refused, because
     // the version message we send on connect needs the home ID.

@@ -26,6 +26,12 @@ import {
 import { ClientsController } from "./server.js";
 import { OutgoingEvent } from "./outgoing_message.js";
 import { NodeNotFoundError } from "./error.js";
+import { EventEmitter } from "node:events";
+import {
+  maintenanceFindingEvents,
+  maintenanceFindingsSchemaVersion,
+  type MaintenanceFinding,
+} from "./maintenance.js";
 
 export class EventForwarder {
   /**
@@ -107,6 +113,26 @@ export class EventForwarder {
         { minSchemaVersion: 47 },
       );
     });
+
+    // Maintenance (report flood) findings, schema version >= 53.
+    // The driver emits these itself - the server only forwards them.
+    for (const event of maintenanceFindingEvents) {
+      // The driver's typings do not include these events in all
+      // zwave-js versions, so bind them through the EventEmitter API.
+      (this.clientsController.driver as unknown as EventEmitter).on(
+        event,
+        (finding: MaintenanceFinding) => {
+          this.clientsController.sendEventToListeningClients(
+            {
+              source: "driver",
+              event,
+              finding,
+            },
+            { minSchemaVersion: maintenanceFindingsSchemaVersion },
+          );
+        },
+      );
+    }
   }
 
   setupControllerAndNodes() {

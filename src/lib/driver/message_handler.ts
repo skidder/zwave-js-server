@@ -11,6 +11,10 @@ import { DriverCommand } from "./command.js";
 import { IncomingMessageDriver } from "./incoming_message.js";
 import { DriverResultTypes } from "./outgoing_message.js";
 import { dumpDriver, dumpLogConfig } from "../state.js";
+import {
+  applyMaintenanceSuggestion,
+  getMaintenanceFindings,
+} from "../maintenance.js";
 import { MessageHandler } from "../message_handler.js";
 import { preserveLogTransports } from "../logging.js";
 
@@ -188,6 +192,20 @@ export class DriverMessageHandler implements MessageHandler {
       case DriverCommand.disableFrequentRSSIMonitoring: {
         this.driver.disableFrequentRSSIMonitoring();
         return {};
+      }
+      // Maintenance (report flood) findings, schema version >= 53
+      case DriverCommand.getMaintenanceFindings: {
+        const maintenanceFindings = getMaintenanceFindings(this.driver);
+        return { maintenanceFindings };
+      }
+      case DriverCommand.applyMaintenanceSuggestion: {
+        // Never applies anything on its own - only on explicit client request
+        const verification = await applyMaintenanceSuggestion(
+          this.driver,
+          message.findingId,
+          message.nodeId,
+        );
+        return { verification };
       }
       default: {
         throw new UnknownCommandError(command);

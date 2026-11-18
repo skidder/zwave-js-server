@@ -152,6 +152,17 @@ interface IncomingCommandDisableFrequentRSSIMonitoring extends IncomingCommandBa
   command: DriverCommand.disableFrequentRSSIMonitoring;
 }
 
+// Schema version >= 53:
+interface IncomingCommandGetMaintenanceFindings extends IncomingCommandBase {
+  command: DriverCommand.getMaintenanceFindings;
+}
+
+interface IncomingCommandApplyMaintenanceSuggestion extends IncomingCommandBase {
+  command: DriverCommand.applyMaintenanceSuggestion;
+  findingId: string;
+  nodeId: number;
+}
+
 export type IncomingMessageDriver =
   | IncomingCommandGetConfig
   | IncomingCommandUpdateLogConfig
@@ -180,4 +191,6 @@ export type IncomingMessageDriver =
   | IncomingCommandGetSafeCCVersion
   | IncomingCommandUpdateUserAgent
   | IncomingCommandEnableFrequentRSSIMonitoring
-  | IncomingCommandDisableFrequentRSSIMonitoring;
+  | IncomingCommandDisableFrequentRSSIMonitoring
+  | IncomingCommandGetMaintenanceFindings
+  | IncomingCommandApplyMaintenanceSuggestion;

@@ -32,4 +32,7 @@ export enum DriverCommand {
   // RSSI monitoring
   enableFrequentRSSIMonitoring = "driver.enable_frequent_rssi_monitoring",
   disableFrequentRSSIMonitoring = "driver.disable_frequent_rssi_monitoring",
+  // Maintenance (report flood) findings, schema version >= 53:
+  getMaintenanceFindings = "driver.get_maintenance_findings",
+  applyMaintenanceSuggestion = "driver.apply_maintenance_suggestion",
 }

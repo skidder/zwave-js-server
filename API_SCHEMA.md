@@ -412,3 +412,9 @@ Base schema.
 ## Schema 52
 
 - No API changes. This schema serves as a marker that `zwave-js` transfers firmware updates to one node at a time.
+
+## Schema 53
+
+- Added driver events `maintenance finding`, `maintenance finding updated` and `maintenance finding resolved`, which forward the driver's report-flood (maintenance) findings. Each event carries the full `finding` payload.
+- Added `maintenanceFindings` to the driver state (`driver.get_config` and the initial state dump), containing the driver's active maintenance findings.
+- Added driver commands `driver.get_maintenance_findings` and `driver.apply_maintenance_suggestion` (`findingId`, `nodeId`), which applies the suggested configuration changes for one node of a finding. The server never applies a suggestion on its own - only in response to this command.

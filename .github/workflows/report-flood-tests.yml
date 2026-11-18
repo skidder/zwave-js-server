@@ -1,0 +1,28 @@
+name: Report-flood branch tests
+
+# Fork-only workflow: runs the test suites on the patched branch.
+on:
+  push:
+    branches:
+      - report-flood-forwarding
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: |
+          corepack enable
+          corepack yarn install --immutable
+      - name: Typecheck and lint
+        run: |
+          corepack yarn tsc --noEmit
+          corepack yarn eslint
+      - name: Unit tests
+        run: corepack yarn test
+      - name: Integration tests (maintenance forwarding)
+        run: corepack yarn tsx src/test/integration.ts

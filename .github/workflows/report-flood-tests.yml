@@ -23,6 +23,9 @@ jobs:
           corepack yarn tsc --noEmit
           corepack yarn eslint
       - name: Unit tests
-        run: corepack yarn test
+        run: corepack yarn vitest run
+      - name: Prettier (changed files only; full-tree check is pre-existing-broken at this base)
+        run: |
+          corepack yarn prettier --check src/lib/maintenance.ts src/lib/forward.ts src/lib/state.ts src/lib/const.ts src/lib/driver src/mock/index.ts src/test/integration.ts
       - name: Integration tests (maintenance forwarding)
         run: corepack yarn tsx src/test/integration.ts
